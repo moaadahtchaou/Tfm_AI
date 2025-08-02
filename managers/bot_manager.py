@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """
-Bot Manager for the background game controller
+Bot Manager for the enhanced background game controller
+UPDATE: managers/bot_manager.py - Only change the import and class name lines
 """
 
 import signal
 from core.formatter import BotFormatter
-from core.game_controller import BackgroundGameController
-from core.command_handlers import CommandHandlers
+from core.game_controller import BackgroundGameController  # <- CHANGE THIS LINE
 from config.settings import BotConfig
 
 
-# Combine the game controller with command handlers
-class EnhancedGameController(BackgroundGameController, CommandHandlers):
-    """Game controller with command handling capabilities"""
-    pass
-
-
 class BotManager:
-    """Manager for the background game controller"""
+    """Manager for the enhanced background game controller"""
     
     def __init__(self, config_file=None):
         self.config = BotConfig(config_file)
@@ -35,7 +29,7 @@ class BotManager:
         full_config = dict(self.config.config)
         full_config['ai_config'] = self.config.create_ai_config()
         
-        self.bot = EnhancedGameController(
+        self.bot = BackgroundGameController(  # <- CHANGE THIS LINE
             config=full_config,
             **bot_config
         )
@@ -71,12 +65,12 @@ class BotManager:
             self.running = False
             if self.bot:
                 await self.bot.shutdown()
-            BotFormatter.log("AI Bot stopped", "BOT")
+            BotFormatter.log("Enhanced AI Bot stopped", "BOT")
     
     def _log_startup_info(self):
         """Log startup information"""
         BotFormatter.log("=" * 60, "BOT")
-        BotFormatter.log("TRANSFORMICE AI BOT WITH BROWSER GEMINI", "BOT")
+        BotFormatter.log("TRANSFORMICE AI BOT WITH ADVANCED GEMINI", "BOT")
         BotFormatter.log("=" * 60, "BOT")
         BotFormatter.log(f"Listening on ports {self.config.get('host_main_port', 11801)}/{self.config.get('host_satellite_port', 12801)}", "INFO")
         BotFormatter.log("", "INFO")
@@ -89,14 +83,21 @@ class BotManager:
         BotFormatter.log("", "INFO")
         BotFormatter.log("AVAILABLE COMMANDS:", "INFO")
         BotFormatter.log("Movement: $move, $jump, $walk, $stop, $spam, $combo", "INFO")
-        BotFormatter.log("Browser AI: $ai [question], $ask [question]", "AI")
+        BotFormatter.log("Advanced AI: $newai --darija --anime, $switchai [name], $listai", "AI")
+        BotFormatter.log("AI Chat: $ai [question] (uses current personality)", "AI")
         BotFormatter.log("AI Control: $aiopen, $aiclose", "AI")
         BotFormatter.log("Bot Control: $status, $chat, $on, $off, $reset, $find", "INFO")
+        BotFormatter.log("", "INFO")
+        BotFormatter.log("ADVANCED AI EXAMPLES:", "AI")
+        BotFormatter.log("$newai --darija --anime --name 'OtakuMorocco'", "AI")
+        BotFormatter.log("$newai --french --gaming --custom 'Expert gamer'", "AI")
+        BotFormatter.log("$switchai darija_anime", "AI")
+        BotFormatter.log("$ai Salam, ash kat9oul 3la One Piece?", "AI")
         BotFormatter.log("", "INFO")
         
         try:
             from selenium import webdriver
-            BotFormatter.log("✅ Browser automation ready - Gemini AI available!", "AI")
+            BotFormatter.log("✅ Browser automation ready - Advanced Gemini AI available!", "AI")
         except ImportError:
             BotFormatter.log("⚠️  Install Selenium for AI features:", "WARNING")
             BotFormatter.log("   pip install selenium", "WARNING")
