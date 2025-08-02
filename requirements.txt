@@ -1,0 +1,15 @@
+# Core dependencies
+asyncio
+caseus
+
+# Windows API
+pywin32
+
+# Browser automation
+selenium
+
+# Optional - for colored terminal output
+colorama
+
+# Your existing caseus dependencies (if any)
+fixedint
