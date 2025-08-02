@@ -17,9 +17,9 @@
   "headless_browser": false,
   
   "_comment_advanced": "Advanced settings - usually don't need to change these",
-  "ai_response_delay_min": 1.0,
-  "ai_response_delay_max": 2.5,
-  "chat_chunk_size": 90,
+  "ai_response_delay_min": 0.5,
+  "ai_response_delay_max": 1.5,
+  "chat_chunk_size": 65,
   "typing_speed_min": 0.05,
   "typing_speed_max": 0.12,
   "movement_precision": 100

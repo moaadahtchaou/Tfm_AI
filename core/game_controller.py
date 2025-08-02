@@ -332,6 +332,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
         elif not self.controller_username and not self.bot_username:
             # Check if message looks like a command
             if message.strip().startswith('$'):
+
                 self.controller_username = sender
                 self.bot_username = receiver
                 return True
@@ -445,7 +446,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
         """Execute new AI creation command"""
         try:
             # Send "creating" message first
-            await self._send_bot_message("🔄 Creating new AI personality...")
+            await self._send_bot_message("Creating new AI personality...")
             
             # Create the new AI
             result = await self.advanced_gemini.create_new_ai(ai_args)
@@ -453,19 +454,19 @@ class BackgroundGameController(caseus.proxies.Proxy):
             # Send result
             await self._send_bot_message(result)
             
-            # Show usage instructions
-            await asyncio.sleep(1)
-            await self._send_bot_message("💡 Use $ai [question] to chat with this AI")
+            # Show usage instructions only if successful
+            if result == "Done new personality":
+                await asyncio.sleep(0.3)
             
         except Exception as e:
             BotFormatter.log(f"Error in newai command: {e}", "ERROR")
-            await self._send_bot_message(f"❌ Error creating AI: {str(e)[:50]}...")
+            await self._send_bot_message(f"Error creating AI: {str(e)[:50]}...")
     
     async def _execute_switchai_command(self, username, ai_name):
         """Execute AI switch command"""
         try:
             # Send "switching" message first
-            await self._send_bot_message(f"🔄 Switching to AI: {ai_name}...")
+            await self._send_bot_message(f"Switching to AI: {ai_name}...")
             
             # Switch to the AI
             result = await self.advanced_gemini.switch_to_ai(ai_name)
@@ -475,7 +476,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
             
         except Exception as e:
             BotFormatter.log(f"Error in switchai command: {e}", "ERROR")
-            await self._send_bot_message(f"❌ Error switching AI: {str(e)[:50]}...")
+            await self._send_bot_message(f"Error switching AI: {str(e)[:50]}...")
     
     async def _execute_listai_command(self, username):
         """Execute list AI command"""
@@ -496,13 +497,13 @@ class BackgroundGameController(caseus.proxies.Proxy):
                     
         except Exception as e:
             BotFormatter.log(f"Error in listai command: {e}", "ERROR")
-            await self._send_bot_message(f"❌ Error listing AIs: {str(e)[:50]}...")
+            await self._send_bot_message(f"Error listing AIs: {str(e)[:50]}...")
     
     async def _execute_ai_command(self, username, question):
         """Execute AI command using the current personality"""
         try:
             # Send "thinking" message first
-            await self._send_bot_message("🤔 Thinking...")
+            await self._send_bot_message("Thinking...")
             
             # Add human-like delay before processing
             await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -514,7 +515,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
             max_length = 85  # Leave some margin for emojis
             
             if len(response) <= max_length:
-                await self._send_bot_message(f"🤖 {response}")
+                await self._send_bot_message(f"{response}")
             else:
                 # Smart word-boundary splitting
                 chunks = self._split_message_smart(response, max_length - 4)  # -4 for "🤖 " prefix
@@ -522,7 +523,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
                 for i, chunk in enumerate(chunks):
                     if i == 0:
                         # First chunk gets the robot emoji
-                        await self._send_bot_message(f"🤖 {chunk}")
+                        await self._send_bot_message(f"{chunk}")
                     else:
                         # Subsequent chunks get continuation indicator
                         await self._send_bot_message(f"   {chunk}")
@@ -533,89 +534,48 @@ class BackgroundGameController(caseus.proxies.Proxy):
                     
         except Exception as e:
             BotFormatter.log(f"Error in AI command: {e}", "ERROR")
-            await self._send_bot_message(f"❌ AI Error: {str(e)[:50]}...")
+            await self._send_bot_message(f" AI Error: {str(e)[:50]}...")
 
     def _split_message_smart(self, text, max_length):
-        """Split message at word boundaries, preserving sentence structure"""
+        """Split message at word boundaries, preserving all content"""
         if len(text) <= max_length:
             return [text]
         
         chunks = []
+        words = text.split()  # Split into words
         current_chunk = ""
         
-        # Split by sentences first (., !, ?)
-        sentences = re.split(r'([.!?]\s*)', text)
-        
-        # Rejoin sentence parts
-        full_sentences = []
-        for i in range(0, len(sentences), 2):
-            sentence = sentences[i]
-            if i + 1 < len(sentences):
-                sentence += sentences[i + 1]
-            if sentence.strip():
-                full_sentences.append(sentence.strip())
-        
-        for sentence in full_sentences:
-            # If sentence is too long, split by words
-            if len(sentence) > max_length:
-                words = sentence.split()
-                temp_chunk = ""
-                
-                for word in words:
-                    # Check if adding this word would exceed limit
-                    test_chunk = f"{temp_chunk} {word}".strip()
-                    
-                    if len(test_chunk) <= max_length:
-                        temp_chunk = test_chunk
-                    else:
-                        # Save current chunk and start new one
-                        if temp_chunk:
-                            if current_chunk and len(current_chunk + " " + temp_chunk) <= max_length:
-                                current_chunk = f"{current_chunk} {temp_chunk}".strip()
-                            else:
-                                if current_chunk:
-                                    chunks.append(current_chunk)
-                                current_chunk = temp_chunk
-                        else:
-                            # Single word is too long, force split
-                            if current_chunk:
-                                chunks.append(current_chunk)
-                                current_chunk = ""
-                            # Split long word if absolutely necessary
-                            if len(word) > max_length:
-                                chunks.append(word[:max_length-3] + "...")
-                                current_chunk = "..." + word[max_length-3:]
-                            else:
-                                current_chunk = word
-                        
-                        temp_chunk = word
-                
-                # Add remaining temp_chunk
-                if temp_chunk:
-                    if current_chunk and len(current_chunk + " " + temp_chunk) <= max_length:
-                        current_chunk = f"{current_chunk} {temp_chunk}".strip()
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                        current_chunk = temp_chunk
+        for word in words:
+            # Check if adding this word would exceed the limit
+            test_chunk = f"{current_chunk} {word}".strip() if current_chunk else word
+            
+            if len(test_chunk) <= max_length:
+                # Word fits, add it to current chunk
+                current_chunk = test_chunk
             else:
-                # Sentence fits, try to add to current chunk
-                if current_chunk and len(current_chunk + " " + sentence) <= max_length:
-                    current_chunk = f"{current_chunk} {sentence}".strip()
+                # Word doesn't fit
+                if current_chunk:
+                    # Save current chunk and start new one with this word
+                    chunks.append(current_chunk)
+                    current_chunk = word
                 else:
-                    # Start new chunk
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = sentence
+                    # Single word is too long, we have to split it
+                    if len(word) > max_length:
+                        # Split long word
+                        chunks.append(word[:max_length-3] + "...")
+                        current_chunk = "..." + word[max_length-3:]
+                    else:
+                        current_chunk = word
         
-        # Add final chunk
+        # Add the last chunk if it has content
         if current_chunk:
             chunks.append(current_chunk)
         
-        # Ensure no empty chunks
-        chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
+        # Ensure we have at least one chunk
+        if not chunks:
+            chunks = [text[:max_length]]
         
-        return chunks if chunks else [text[:max_length]]
+        return chunks
     
     async def _send_bot_message(self, message):
         """Send a message from the bot to the game chat"""
@@ -778,14 +738,14 @@ class BackgroundGameController(caseus.proxies.Proxy):
         
         elif command == "ai_close":
             self.advanced_gemini.close()
-            await self._send_bot_message("🔴 Advanced browser closed")
+            await self._send_bot_message("Advanced browser closed")
         
         elif command == "ai_open":
             success = await self.advanced_gemini.initialize()
             if success:
-                await self._send_bot_message("🟢 Advanced browser ready!")
+                await self._send_bot_message("Advanced browser ready!")
             else:
-                await self._send_bot_message("❌ Advanced browser failed to start")
+                await self._send_bot_message("Advanced browser failed to start")
 
     async def _execute_window_select(self, username, search_term):
         """Execute window select by title or index command"""
@@ -804,9 +764,9 @@ class BackgroundGameController(caseus.proxies.Proxy):
             
             success = await asyncio.get_event_loop().run_in_executor(None, switch_window)
             if success:
-                await self._send_bot_message(f"✅ Switched to window {window_index}")
+                await self._send_bot_message(f"Switched to window {window_index}")
             else:
-                await self._send_bot_message(f"❌ Failed to switch to window {window_index}")
+                await self._send_bot_message(f"Failed to switch to window {window_index}")
             return
             
         except ValueError:
@@ -819,12 +779,12 @@ class BackgroundGameController(caseus.proxies.Proxy):
         try:
             success = await asyncio.get_event_loop().run_in_executor(None, select_window)
             if success:
-                await self._send_bot_message(f"✅ Selected window containing '{search_term}'")
+                await self._send_bot_message(f"Selected window containing '{search_term}'")
             else:
-                await self._send_bot_message(f"❌ No window found containing '{search_term}'")
+                await self._send_bot_message(f"No window found containing '{search_term}'")
         except Exception as e:
             BotFormatter.log(f"Window select failed: {e}", "ERROR")
-            await self._send_bot_message("❌ Window select error")
+            await self._send_bot_message("Window select error")
     
     async def _execute_list_windows(self):
         """List all available windows"""
@@ -832,7 +792,7 @@ class BackgroundGameController(caseus.proxies.Proxy):
         
         if not self.window_controller:
             BotFormatter.log("Window controller not available", "ERROR")
-            await self._send_bot_message("❌ Window controller not available")
+            await self._send_bot_message("Window controller not available")
             return
         
         def get_windows():
@@ -845,15 +805,15 @@ class BackgroundGameController(caseus.proxies.Proxy):
             BotFormatter.log(f"Got {len(windows) if windows else 0} windows from detection", "DEBUG")
             
             if not windows:
-                await self._send_bot_message("❌ No Transformice windows found")
+                await self._send_bot_message("No Transformice windows found")
                 await asyncio.sleep(1)
-                await self._send_bot_message("💡 Make sure Transformice is running")
+                await self._send_bot_message("Make sure Transformice is running")
                 await asyncio.sleep(1) 
-                await self._send_bot_message("🔍 Try: $find for window detection")
+                await self._send_bot_message("Try: $find for window detection")
                 return
             
             # Send window list in chat
-            await self._send_bot_message(f"🪟 Found {len(windows)} windows:")
+            await self._send_bot_message(f"Found {len(windows)} windows:")
             await asyncio.sleep(1)  # Delay between messages
             
             for window in windows:
@@ -871,4 +831,32 @@ class BackgroundGameController(caseus.proxies.Proxy):
             BotFormatter.log(f"List windows failed: {e}", "ERROR")
             import traceback
             BotFormatter.log(f"Traceback: {traceback.format_exc()}", "DEBUG")
-            await self._send_bot_message("❌ Error listing windows")
+            await self._send_bot_message("Error listing windows")
+    
+    async def shutdown(self):
+        """Shutdown the bot and clean up resources"""
+        try:
+            BotFormatter.log("Shutting down Enhanced Game Controller...", "INFO")
+            
+            # Stop any running movement tasks
+            if self.movement_task:
+                self.movement_task.cancel()
+                try:
+                    await self.movement_task
+                except asyncio.CancelledError:
+                    pass
+                self.movement_task = None
+            
+            # Close the browser
+            if hasattr(self, 'advanced_gemini') and self.advanced_gemini:
+                self.advanced_gemini.close()
+            
+            # Close the window controller
+            if hasattr(self, 'window_controller') and self.window_controller:
+                # Window controller doesn't need explicit cleanup
+                pass
+            
+            BotFormatter.log("Enhanced Game Controller shutdown complete", "INFO")
+            
+        except Exception as e:
+            BotFormatter.log(f"Error during shutdown: {e}", "ERROR")

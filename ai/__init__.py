@@ -3,6 +3,6 @@
 AI integration module
 """
 
-from ai.browser_gemini import BrowserGemini
+from ai.advanced_browser_gemini import AdvancedBrowserGemini, AIPersonality
 
-__all__ = ['BrowserGemini']
+__all__ = ['AdvancedBrowserGemini', 'AIPersonality']

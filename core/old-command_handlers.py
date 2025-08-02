@@ -17,7 +17,7 @@ class CommandHandlers:
         """Execute AI command using browser-based Gemini"""
         try:
             # Send "thinking" message first
-            await self._send_bot_message("🤔 Thinking...")
+            await self._send_bot_message("Thinking...")
             
             # Add human-like delay before processing
             await asyncio.sleep(random.uniform(1.0, 2.0))
@@ -29,7 +29,7 @@ class CommandHandlers:
             max_length = 85  # Leave some margin for emojis
             
             if len(response) <= max_length:
-                await self._send_bot_message(f"🤖 {response}")
+                await self._send_bot_message(f"{response}")
             else:
                 # Smart word-boundary splitting
                 chunks = self._split_message_smart(response, max_length - 4)  # -4 for "🤖 " prefix
@@ -37,7 +37,7 @@ class CommandHandlers:
                 for i, chunk in enumerate(chunks):
                     if i == 0:
                         # First chunk gets the robot emoji
-                        await self._send_bot_message(f"🤖 {chunk}")
+                        await self._send_bot_message(f"{chunk}")
                     else:
                         # Subsequent chunks get continuation indicator
                         await self._send_bot_message(f"   {chunk}")
@@ -48,7 +48,7 @@ class CommandHandlers:
                     
         except Exception as e:
             BotFormatter.log(f"Error in AI command: {e}", "ERROR")
-            await self._send_bot_message(f"❌ AI Error: {str(e)[:50]}...")
+            await self._send_bot_message(f"AI Error: {str(e)[:50]}...")
     
     def _split_message_smart(self, text, max_length):
         """Split message at word boundaries, preserving sentence structure"""
@@ -291,14 +291,14 @@ class CommandHandlers:
         
         elif command == "ai_close":
             self.gemini.close()
-            await self._send_bot_message("🔴 Browser closed")
+            await self._send_bot_message("Browser closed")
         
         elif command == "ai_open":
             success = await self.gemini.initialize()
             if success:
-                await self._send_bot_message("🟢 Browser ready!")
+                await self._send_bot_message("Browser ready!")
             else:
-                await self._send_bot_message("❌ Browser failed to start")
+                await self._send_bot_message("Browser failed to start")
 
     async def _execute_window_select(self, username, search_term):
         """Execute window select by title or index command"""
@@ -317,9 +317,9 @@ class CommandHandlers:
             
             success = await asyncio.get_event_loop().run_in_executor(None, switch_window)
             if success:
-                await self._send_bot_message(f"✅ Switched to window {window_index}")
+                await self._send_bot_message(f"Switched to window {window_index}")
             else:
-                await self._send_bot_message(f"❌ Failed to switch to window {window_index}")
+                await self._send_bot_message(f"Failed to switch to window {window_index}")
             return
             
         except ValueError:
@@ -332,12 +332,12 @@ class CommandHandlers:
         try:
             success = await asyncio.get_event_loop().run_in_executor(None, select_window)
             if success:
-                await self._send_bot_message(f"✅ Selected window containing '{search_term}'")
+                await self._send_bot_message(f"Selected window containing '{search_term}'")
             else:
-                await self._send_bot_message(f"❌ No window found containing '{search_term}'")
+                await self._send_bot_message(f"No window found containing '{search_term}'")
         except Exception as e:
             BotFormatter.log(f"Window select failed: {e}", "ERROR")
-            await self._send_bot_message("❌ Window select error")
+            await self._send_bot_message("Window select error")
     
     async def _execute_list_windows(self):
         """List all available windows"""
@@ -345,7 +345,7 @@ class CommandHandlers:
         
         if not self.window_controller:
             BotFormatter.log("Window controller not available", "ERROR")
-            await self._send_bot_message("❌ Window controller not available")
+            await self._send_bot_message("Window controller not available")
             return
         
         def get_windows():
@@ -358,15 +358,15 @@ class CommandHandlers:
             BotFormatter.log(f"Got {len(windows) if windows else 0} windows from detection", "DEBUG")
             
             if not windows:
-                await self._send_bot_message("❌ No Transformice windows found")
+                await self._send_bot_message("No Transformice windows found")
                 await asyncio.sleep(1)
-                await self._send_bot_message("💡 Make sure Transformice is running")
+                await self._send_bot_message("Make sure Transformice is running")
                 await asyncio.sleep(1) 
-                await self._send_bot_message("🔍 Try: $debug for detailed scan")
+                await self._send_bot_message("Try: $debug for detailed scan")
                 return
             
             # Send window list in chat
-            await self._send_bot_message(f"🪟 Found {len(windows)} windows:")
+            await self._send_bot_message(f"Found {len(windows)} windows:")
             await asyncio.sleep(1)  # Delay between messages
             
             for window in windows:
@@ -384,4 +384,4 @@ class CommandHandlers:
             BotFormatter.log(f"List windows failed: {e}", "ERROR")
             import traceback
             BotFormatter.log(f"Traceback: {traceback.format_exc()}", "DEBUG")
-            await self._send_bot_message("❌ Error listing windows")
+            await self._send_bot_message("Error listing windows")
