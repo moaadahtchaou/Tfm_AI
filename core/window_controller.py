@@ -217,56 +217,33 @@ class WindowController:
             return False
     
     def send_chat_to_window(self, message):
-        messagev2=""
-        """Send chat message using Windows API with human-like typing"""
+        """Send chat message (optimized for ≤75 character chunks)"""
         if not self.bot_window_handle:
             return False
         
+        # Safety check - truncate if somehow a long message gets here
+        if len(message) > 75:
+            BotFormatter.log(f"Warning: Truncating message from {len(message)} to 75 chars", "WARNING")
+            message = message[:75]
+        
         try:
-            # Press Enter to open chat
+            # Open chat
             win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYDOWN, self.VK_RETURN, 0)
-            time.sleep(0.1)
+            time.sleep(0.05)
             win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYUP, self.VK_RETURN, 0)
             
-            # Wait for chat box to open (human-like delay)
-            time.sleep(random.uniform(0.1, 0.2))
+            # Wait for chat box to open
+            time.sleep(0.2)
             
-            # Type each character with human-like speed and pauses
-            for i, char in enumerate(message):
-                messagev2+=char
-                if char == ' ':
-                    # Send space key
-                    win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYDOWN, self.VK_SPACE, 0)
-                    time.sleep(random.uniform(0.01, 0.02))
-                    win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYUP, self.VK_SPACE, 0)
-
-                else:
-                    # Send character
-                    win32gui.PostMessage(self.bot_window_handle, win32con.WM_CHAR, ord(char), 0)
-                
-                # Human-like typing delays
-                if i % 15 == 14:  # Pause every 15 characters (like thinking)
-                    time.sleep(random.uniform(0.1, 0.3))
-                elif i % 8 == 7:  # Small pause every 8 characters
-                    time.sleep(random.uniform(0.1, 0.2))
-                elif char in '.,!?':  # Pause after punctuation
-                    time.sleep(random.uniform(0.15, 0.3))
-                elif char == ' ':  # Pause after spaces (between words)
-                    time.sleep(random.uniform(0.08, 0.15))
-                else:
-                    # Normal typing speed: 40-80 WPM (converted to character delay)
-                    # Average human types 1-3 characters per second
-                    time.sleep(random.uniform(0.05, 0.12))
-                
-                # Occasional longer pauses (like human hesitation)
-                if random.random() < 0.1:  # 10% chance
-                    time.sleep(random.uniform(0.1, 0.3))
+            # Send characters with consistent timing
+            for char in message:
+                win32gui.PostMessage(self.bot_window_handle, win32con.WM_CHAR, ord(char), 0)
+                time.sleep(0.01)  # Fast, consistent timing
             
-            # Wait before sending (like reviewing the message)
-            time.sleep(random.uniform(0.1, 0.3))
-            print("**********")
-            print(messagev2)
-            # Press Enter to send the message
+            # Wait for game to process all characters
+            time.sleep(0.2)
+            
+            # Send Enter to submit
             win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYDOWN, self.VK_RETURN, 0)
             time.sleep(0.05)
             win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYUP, self.VK_RETURN, 0)
@@ -274,6 +251,7 @@ class WindowController:
             return True
             
         except Exception as e:
+            BotFormatter.log(f"Chat send failed: {e}", "ERROR")
             return False
     
     def move_character(self, direction, distance_pixels=50):

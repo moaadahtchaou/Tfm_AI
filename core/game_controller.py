@@ -5,6 +5,7 @@ REPLACE: core/game_controller.py
 """
 
 import asyncio
+import random
 import re
 import time
 import random
@@ -16,6 +17,7 @@ from caseus.packets import serverbound, clientbound
 from core.formatter import BotFormatter
 from core.window_controller import WindowController
 from ai.advanced_browser_gemini import AdvancedBrowserGemini
+from core.reset_window_player import ResetWindowPlayer
 
 
 class BackgroundGameController(caseus.proxies.Proxy):
@@ -54,6 +56,8 @@ class BackgroundGameController(caseus.proxies.Proxy):
     def __init__(self, config=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
+       
+
         self.config = config or {}
         self.enabled = True
         
@@ -86,7 +90,8 @@ class BackgroundGameController(caseus.proxies.Proxy):
         
         # Setup packet listeners
         self._setup_listeners()
-        
+        # Initialize reset player module
+        self.reset_player_module = ResetWindowPlayer(self.config)   
         # Initialize window controller
         self._init_window_controller()
         
@@ -122,6 +127,8 @@ class BackgroundGameController(caseus.proxies.Proxy):
             'ai_open': re.compile(r'\$aiopen', re.IGNORECASE),
         }
     
+        # Add reset window player pattern
+        self.resetplayer_pattern = re.compile(r'\$resetplayer', re.IGNORECASE)
     def _init_window_controller(self):
         """Initialize the window controller"""
         try:
@@ -210,7 +217,8 @@ class BackgroundGameController(caseus.proxies.Proxy):
         BotFormatter.log("Languages: darija, arabic, french, english", "AI")
         BotFormatter.log("Topics: anime, gaming, casual, tech, sports", "AI")
         BotFormatter.log("Commands work in both ROOM CHAT and WHISPERS!", "SUCCESS")
-    
+        BotFormatter.log("Reset Commands:", "INFO")
+        BotFormatter.log("  $resetplayer - Close and restart bot's game window", "INFO")
     async def _debug_all_packets(self, source, packet):
         """Debug listener to find whisper packets"""
         packet_type = type(packet).__name__
@@ -343,6 +351,14 @@ class BackgroundGameController(caseus.proxies.Proxy):
         """Process a command from either room chat or whisper with enhanced AI support"""
         command_source = "WHISPER" if is_whisper else "ROOM CHAT"
         
+
+        # Handle RESET PLAYER command
+        resetplayer_match = self.resetplayer_pattern.match(message)
+        if resetplayer_match:
+            BotFormatter.log(f"{command_source} RESET PLAYER command from {username}", "REMOTE")
+            await self._execute_resetplayer_command(username)
+            return
+
         # Handle NEW AI creation commands
         newai_match = self.newai_pattern.match(message)
         if newai_match:
@@ -537,45 +553,41 @@ class BackgroundGameController(caseus.proxies.Proxy):
             await self._send_bot_message(f" AI Error: {str(e)[:50]}...")
 
     def _split_message_smart(self, text, max_length):
-        """Split message at word boundaries, preserving all content"""
+        """Split message at word boundaries, keeping chunks ≤ max_length"""
         if len(text) <= max_length:
             return [text]
         
         chunks = []
-        words = text.split()  # Split into words
+        words = text.split()
         current_chunk = ""
         
         for word in words:
-            # Check if adding this word would exceed the limit
+            # Test if adding this word would exceed the limit
             test_chunk = f"{current_chunk} {word}".strip() if current_chunk else word
             
             if len(test_chunk) <= max_length:
-                # Word fits, add it to current chunk
+                # Word fits, add it
                 current_chunk = test_chunk
             else:
                 # Word doesn't fit
                 if current_chunk:
-                    # Save current chunk and start new one with this word
+                    # Save current chunk and start new one
                     chunks.append(current_chunk)
                     current_chunk = word
                 else:
-                    # Single word is too long, we have to split it
+                    # Single word is too long, force split
                     if len(word) > max_length:
-                        # Split long word
+                        # Split the word itself
                         chunks.append(word[:max_length-3] + "...")
                         current_chunk = "..." + word[max_length-3:]
                     else:
                         current_chunk = word
         
-        # Add the last chunk if it has content
+        # Add the final chunk
         if current_chunk:
             chunks.append(current_chunk)
         
-        # Ensure we have at least one chunk
-        if not chunks:
-            chunks = [text[:max_length]]
-        
-        return chunks
+        return chunks if chunks else [text[:max_length]]
     
     async def _send_bot_message(self, message):
         """Send a message from the bot to the game chat"""
@@ -652,30 +664,52 @@ class BackgroundGameController(caseus.proxies.Proxy):
         
         await asyncio.get_event_loop().run_in_executor(None, combo)
         BotFormatter.log(f"Completed combo: {' '.join(actions)}", "SUCCESS")
-    
-    async def _execute_chat(self, username, message):
-        """Execute chat command using Windows API only"""
-        # Convert message to string and ensure it's not empty
-        message = str(message).strip()
-        if not message:
-            return
-            
-        # Use Windows API method only
+    async def _send_single_message(self, message):
+        """Send a single message (must be ≤75 characters)"""
         if self.window_controller and self.window_controller.is_window_valid():
             def send_chat():
-                success = self.window_controller.send_chat_to_window(message)
-                return success
+                return self.window_controller.send_chat_to_window(message)
             
             try:
                 success = await asyncio.get_event_loop().run_in_executor(None, send_chat)
                 if success:
-                    BotFormatter.log(f"Bot sent message: {message}", "SUCCESS")
+                    BotFormatter.log(f"Bot sent: {message}", "SUCCESS")
                 else:
                     BotFormatter.log("Chat method failed", "ERROR")
             except Exception as e:
                 BotFormatter.log(f"Chat failed: {e}", "ERROR")
         else:
             BotFormatter.log("Bot window not valid - cannot send chat!", "ERROR")
+
+    async def _execute_chat(self, username, message):
+        """Execute chat command with automatic chunking for Transformice's input limit"""
+        # Convert message to string and ensure it's not empty
+        message = str(message).strip()
+        if not message:
+            return
+        
+        # Transformice programmatic input limit is ~77 characters
+        # Use 75 to be safe and account for variations
+        max_length = 75
+        
+        if len(message) <= max_length:
+            # Message fits in one chunk
+            await self._send_single_message(message)
+        else:
+            # Message needs to be split
+            BotFormatter.log(f"Message too long ({len(message)} chars), splitting into chunks...", "INFO")
+            
+            chunks = self._split_message_smart(message, max_length)
+            BotFormatter.log(f"Split into {len(chunks)} chunks", "INFO")
+            
+            # Send each chunk
+            for i, chunk in enumerate(chunks):
+                await self._send_single_message(chunk)
+                BotFormatter.log(f"Sent chunk {i+1}/{len(chunks)} ({len(chunk)} chars)", "SUCCESS")
+                
+                # Human-like delay between chunks
+                if i < len(chunks) - 1:  # Don't delay after last chunk
+                    await asyncio.sleep(random.uniform(1.5, 2.5))
     
     async def _execute_command(self, username, command):
         """Execute other commands"""
@@ -833,6 +867,47 @@ class BackgroundGameController(caseus.proxies.Proxy):
             BotFormatter.log(f"Traceback: {traceback.format_exc()}", "DEBUG")
             await self._send_bot_message("Error listing windows")
     
+    async def _execute_resetplayer_command(self, username):
+        """Execute the reset player command"""
+        try:
+            # Check if user has permission (only controller can reset)
+            if self.controller_username and username.lower() != self.controller_username.lower():
+                await self._send_bot_message("❌ Only controller can reset player")
+                return
+            
+            # Validate configuration
+            if not self.reset_player_module.validate_config():
+                await self._send_bot_message("❌ Reset player not configured")
+                await self._send_bot_message("Add bot_username and bot_password to config")
+                return
+            
+            # Set window controller reference
+            self.reset_player_module.set_window_controller(self.window_controller)
+            
+            # Execute reset with chat callback
+            async def send_to_chat(message):
+                await self._send_bot_message(message)
+            
+            BotFormatter.log("Executing reset player command", "INFO")
+            success = await self.reset_player_module.reset_player(send_to_chat)
+            
+            if success:
+                BotFormatter.log("Reset player completed successfully", "SUCCESS")
+                # Re-initialize window controller connection
+                await asyncio.sleep(2)
+                if self.window_controller:
+                    def refresh_window():
+                        return self.window_controller.set_bot_window()
+                    await asyncio.get_event_loop().run_in_executor(None, refresh_window)
+            else:
+                BotFormatter.log("Reset player failed", "ERROR")
+                
+        except Exception as e:
+            BotFormatter.log(f"Error in reset player command: {e}", "ERROR")
+            await self._send_bot_message(f"❌ Reset error: {str(e)[:30]}...")
+
+
+
     async def shutdown(self):
         """Shutdown the bot and clean up resources"""
         try:

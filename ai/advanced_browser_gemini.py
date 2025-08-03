@@ -38,49 +38,58 @@ class AIPersonality:
         self.prompt_sent = False
     
     def generate_system_prompt(self):
-        """Generate the system prompt for this personality"""
+        """Generate a cleaner, more effective system prompt"""
         
-        # Language configurations
+        # Language configurations with cleaner instructions
         language_configs = {
             'darija': {
-                'instruction': "You MUST respond in Moroccan Darija using Latin script (like: 'Salam, kifach nta?', 'Labas 3lik', 'Ash kat dir?')",
-                'examples': "Examples: 'Ahlan! Kifach nta?', 'Labas 3lik khouya', 'Wach kat9ayed m3ana?'"
+                'instruction': "Respond in Moroccan Darija using Latin script",
+                'style': "casual, friendly Moroccan style",
+                'examples': "Use words like: kifach, wach, bghit, makayn, zwina, etc."
             },
             'arabic': {
-                'instruction': "You MUST respond in Arabic using Arabic script",
-                'examples': "أمثلة: 'أهلاً! كيفك؟', 'أهلاً وسهلاً'"
+                'instruction': "Respond in Arabic using Arabic script",
+                'style': "natural Arabic conversation",
+                'examples': "Use proper Arabic expressions and grammar"
             },
             'french': {
-                'instruction': "You MUST respond in French",
-                'examples': "Exemples: 'Salut! Comment ça va?', 'Bonjour mon ami!'"
+                'instruction': "Respond in French",
+                'style': "conversational French",
+                'examples': "Natural French expressions and vocabulary"
             },
             'english': {
                 'instruction': "Respond in English",
-                'examples': "Examples: 'Hey! How are you?', 'What's up buddy?'"
+                'style': "casual, friendly English",
+                'examples': "Natural English conversation"
             }
         }
         
-        # Topic configurations
+        # Topic configurations with better personalities
         topic_configs = {
             'anime': {
-                'personality': "You are an enthusiastic anime fan who loves discussing anime, manga, characters, and storylines",
-                'interests': "anime series, manga, Japanese culture, character development, plot analysis, recommendations"
+                'personality': "You're an anime enthusiast who loves discussing anime, manga, and Japanese culture",
+                'traits': "knowledgeable about anime series, characters, and storylines",
+                'style': "excited and passionate when talking about anime topics"
             },
             'gaming': {
-                'personality': "You are a passionate gamer who loves discussing games, strategies, and gaming culture",
-                'interests': "video games, gaming strategies, game reviews, gaming news, esports"
+                'personality': "You're a passionate gamer who loves all types of video games",
+                'traits': "knowledgeable about games, strategies, and gaming culture",
+                'style': "enthusiastic about gaming topics and helpful with game advice"
             },
             'casual': {
-                'personality': "You are a friendly, casual chat companion who enjoys everyday conversations",
-                'interests': "daily life, hobbies, general topics, friendly chat"
+                'personality': "You're a friendly, easy-going person who enjoys casual conversation",
+                'traits': "good listener, conversational, and interested in everyday topics",
+                'style': "relaxed and natural in conversation"
             },
             'tech': {
-                'personality': "You are a tech-savvy assistant who loves discussing technology, programming, and innovation",
-                'interests': "technology, programming, software, hardware, tech news"
+                'personality': "You're tech-savvy and love discussing technology and programming",
+                'traits': "knowledgeable about computers, software, and tech trends",
+                'style': "helpful with tech questions and excited about innovations"
             },
             'sports': {
-                'personality': "You are a sports enthusiast who loves discussing various sports, teams, and athletes",
-                'interests': "sports, teams, athletes, matches, sports news"
+                'personality': "You're a sports fan who loves discussing various sports and teams",
+                'traits': "knowledgeable about sports, teams, players, and statistics",
+                'style': "enthusiastic about sports topics and current events"
             }
         }
         
@@ -88,8 +97,32 @@ class AIPersonality:
         lang_config = language_configs.get(self.language, language_configs['english'])
         topic_config = topic_configs.get(self.topic, topic_configs['casual'])
         
-        # Build the system prompt as a single line
-        system_prompt = f"IMPORTANT SYSTEM INSTRUCTIONS: {lang_config['instruction']} {lang_config['examples']} PERSONALITY: {topic_config['personality']} YOUR INTERESTS: {topic_config['interests']} CHAT RULES: Keep responses under 200 characters for game chat, be enthusiastic about {self.topic} topics, use emojis sparingly but appropriately, be natural and conversational, remember this is a game chat environment, stay in character as {self.name}. {self.custom_instructions} IMPORTANT: From now on, ALL your responses should follow these instructions automatically. You don't need to be reminded again."
+        # Build a cleaner, more natural prompt
+        prompt_parts = []
+        
+        # Core personality
+        prompt_parts.append(f"You are {self.name}, a helpful AI assistant chatting in a game.")
+        prompt_parts.append(f"{topic_config['personality']}.")
+        prompt_parts.append(f"You are {topic_config['traits']}.")
+        
+        # Language instruction
+        prompt_parts.append(f"{lang_config['instruction']} in a {lang_config['style']} way.")
+        prompt_parts.append(f"{lang_config['examples']}")
+        
+        # Chat behavior
+        prompt_parts.append("Keep responses short and conversational (under 320 characters when possible).")
+        prompt_parts.append(f"Be {topic_config['style']}.")
+        prompt_parts.append("Use emojis sparingly but appropriately.")
+        
+        # Custom instructions (if provided)
+        if self.custom_instructions.strip():
+            prompt_parts.append(f"Additional instructions: {self.custom_instructions}")
+        
+        # Final instruction
+        prompt_parts.append("Respond naturally as if chatting with a friend in a game!")
+        
+        # Join all parts into a single instruction
+        system_prompt = " ".join(prompt_parts)
         
         return system_prompt
 
@@ -169,15 +202,28 @@ class AdvancedBrowserGemini:
             return False
     
     async def create_new_ai(self, ai_args):
-        """Create a new AI personality from command arguments"""
-        # Parse arguments like --darija --anime --name "MyAI"
+        """Create a new AI personality from command arguments with improved parsing"""
+        # Parse arguments with better handling for quoted strings
         language = "english"
         topic = "casual"
         name = None
         custom_instructions = ""
         
-        # Parse the arguments
-        args = ai_args.strip().split()
+        # Convert the arguments into a more parseable format
+        # Handle quoted strings properly
+        import re
+        
+        # First, extract quoted strings for --name and --custom
+        quoted_pattern = r'--(\w+)\s+"([^"]*)"'
+        quoted_matches = re.findall(quoted_pattern, ai_args)
+        
+        # Remove quoted parts from args for easier parsing
+        args_without_quotes = ai_args
+        for match in re.finditer(quoted_pattern, ai_args):
+            args_without_quotes = args_without_quotes.replace(match.group(0), f'--{match.group(1)} PLACEHOLDER_{match.group(1).upper()}')
+        
+        # Now parse the remaining arguments
+        args = args_without_quotes.strip().split()
         i = 0
         while i < len(args):
             arg = args[i].lower()
@@ -193,15 +239,35 @@ class AdvancedBrowserGemini:
                 elif flag in ['anime', 'gaming', 'casual', 'tech', 'sports']:
                     topic = flag
                 
-                # Name flag (expects a value)
-                elif flag == 'name' and i + 1 < len(args):
-                    i += 1
-                    name = args[i].strip('"\'')
+                # Name flag with placeholder or next argument
+                elif flag == 'name':
+                    if i + 1 < len(args):
+                        next_arg = args[i + 1]
+                        if next_arg == 'PLACEHOLDER_NAME':
+                            # Find the actual quoted value
+                            for param, value in quoted_matches:
+                                if param == 'name':
+                                    name = value
+                                    break
+                            i += 1  # Skip the placeholder
+                        elif not next_arg.startswith('--'):
+                            name = next_arg.strip('"\'')
+                            i += 1  # Skip the value
                 
-                # Custom instruction flag (expects a value)
-                elif flag == 'custom' and i + 1 < len(args):
-                    i += 1
-                    custom_instructions = args[i].strip('"\'')
+                # Custom instruction flag with placeholder or next argument
+                elif flag == 'custom':
+                    if i + 1 < len(args):
+                        next_arg = args[i + 1]
+                        if next_arg == 'PLACEHOLDER_CUSTOM':
+                            # Find the actual quoted value
+                            for param, value in quoted_matches:
+                                if param == 'custom':
+                                    custom_instructions = value
+                                    break
+                            i += 1  # Skip the placeholder
+                        elif not next_arg.startswith('--'):
+                            custom_instructions = args[i + 1].strip('"\'')
+                            i += 1  # Skip the value
             
             i += 1
         
@@ -214,10 +280,10 @@ class AdvancedBrowserGemini:
             if not await self.initialize():
                 return "❌ Failed to start browser"
         
-        # Create the personality object but DON'T add it to personalities yet
+        # Create the personality object
         personality = AIPersonality(name, language, topic, custom_instructions)
         
-        BotFormatter.log(f"Attempting to create AI personality: {name} (Language: {language}, Topic: {topic})", "AI")
+        BotFormatter.log(f"Creating AI: {name} (Lang: {language}, Topic: {topic}, Custom: '{custom_instructions}')", "AI")
         
         # Try to initialize the personality
         success = await self._initialize_personality(personality)
@@ -225,12 +291,12 @@ class AdvancedBrowserGemini:
             # Only add to personalities if initialization succeeded
             self.personalities[name] = personality
             self.current_personality = personality
-            BotFormatter.log(f"Successfully created and initialized AI: {name}", "AI")
-            return "Done new personality"
+            BotFormatter.log(f"Successfully created AI: {name}", "AI")
+            return f"✅ Created AI: {name}"
         else:
             # Don't save failed personalities
-            BotFormatter.log(f"Failed to initialize AI personality: {name}", "ERROR")
-            return "Failed to initialize AI. Check browser connection."
+            BotFormatter.log(f"Failed to initialize AI: {name}", "ERROR")
+            return "❌ Failed to initialize AI"
     
     async def _initialize_personality(self, personality):
         """Initialize a personality in a new tab"""
