@@ -217,6 +217,7 @@ class WindowController:
             return False
     
     def send_chat_to_window(self, message):
+        messagev2=""
         """Send chat message using Windows API with human-like typing"""
         if not self.bot_window_handle:
             return False
@@ -232,11 +233,13 @@ class WindowController:
             
             # Type each character with human-like speed and pauses
             for i, char in enumerate(message):
+                messagev2+=char
                 if char == ' ':
                     # Send space key
                     win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYDOWN, self.VK_SPACE, 0)
                     time.sleep(random.uniform(0.01, 0.02))
                     win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYUP, self.VK_SPACE, 0)
+
                 else:
                     # Send character
                     win32gui.PostMessage(self.bot_window_handle, win32con.WM_CHAR, ord(char), 0)
@@ -261,7 +264,8 @@ class WindowController:
             
             # Wait before sending (like reviewing the message)
             time.sleep(random.uniform(0.1, 0.3))
-            
+            print("**********")
+            print(messagev2)
             # Press Enter to send the message
             win32gui.PostMessage(self.bot_window_handle, win32con.WM_KEYDOWN, self.VK_RETURN, 0)
             time.sleep(0.05)

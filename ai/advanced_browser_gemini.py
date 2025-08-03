@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Fixed Advanced Browser-based Gemini AI integration
+COMPLETE FIXED Advanced Browser-based Gemini AI integration
 REPLACE: ai/advanced_browser_gemini.py
 """
 
 import asyncio
 import time
+import re
+from html import unescape
 from core.formatter import BotFormatter
 
 # Browser automation imports
@@ -93,7 +95,7 @@ class AIPersonality:
 
 
 class AdvancedBrowserGemini:
-    """Advanced Browser-based Gemini AI with multiple personalities"""
+    """Advanced Browser-based Gemini AI with multiple personalities - FIXED VERSION"""
     
     def __init__(self, browser_type="chrome", headless=False):
         self.browser_type = browser_type
@@ -352,9 +354,13 @@ class AdvancedBrowserGemini:
             return f"Error: {str(e)[:50]}..."
     
     async def _send_message(self, message):
-        """Send a message to Gemini in the current tab"""
+        """Enhanced send message method with better response detection"""
         try:
             BotFormatter.log(f"Attempting to send message: {message[:50]}...", "DEBUG")
+            
+            # Count existing responses before sending
+            initial_response_count = self._count_responses()
+            BotFormatter.log(f"Initial response count: {initial_response_count}", "DEBUG")
             
             # Find input element
             input_element = await self._find_input_element()
@@ -370,8 +376,8 @@ class AdvancedBrowserGemini:
             # Submit
             await self._submit_message(input_element)
             
-            # Wait for and extract response
-            response = await self._wait_for_response()
+            # Wait for response with improved detection
+            response = await self._wait_for_new_response(initial_response_count)
             
             if response:
                 BotFormatter.log(f"Got response: {response[:100]}...", "DEBUG")
@@ -386,47 +392,136 @@ class AdvancedBrowserGemini:
             BotFormatter.log(f"Traceback: {traceback.format_exc()}", "DEBUG")
             return None
     
+    def _count_responses(self):
+        """Count existing response elements more accurately"""
+        try:
+            # Count multiple types of response indicators
+            selectors = [
+                "message-content.model-response-text",
+                ".model-response-text",
+                "[data-test-id*='model-turn']",
+                "div.markdown.markdown-main-panel"
+            ]
+            
+            max_count = 0
+            for selector in selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    max_count = max(max_count, len(elements))
+                except:
+                    continue
+            
+            BotFormatter.log(f"Counted {max_count} existing responses", "DEBUG")
+            return max_count
+            
+        except Exception as e:
+            BotFormatter.log(f"Error counting responses: {e}", "DEBUG")
+            return 0
+    
+    async def _wait_for_new_response(self, initial_count):
+        """Wait for a new response to appear"""
+        BotFormatter.log(f"Waiting for new response (initial count: {initial_count})", "DEBUG")
+        
+        max_wait_time = 30  # Maximum wait time in seconds
+        start_time = time.time()
+        
+        # First, wait for response to start appearing
+        while time.time() - start_time < max_wait_time:
+            current_count = self._count_responses()
+            
+            if current_count > initial_count:
+                BotFormatter.log(f"New response detected! Count: {current_count} > {initial_count}", "DEBUG")
+                # Wait a bit more for the response to complete
+                await asyncio.sleep(3)
+                break
+                
+            await asyncio.sleep(1)
+        else:
+            BotFormatter.log("No new response detected in time limit", "WARNING")
+        
+        # Extract the response
+        response = await self._wait_for_response()
+        return response
+    
     async def _find_input_element(self):
-        """Find the input element with better detection based on actual HTML structure"""
+        """Find the input element with improved detection based on actual HTML structure"""
         # Based on your HTML, the structure is:
-        # rich-textarea > div.ql-editor.textarea.new-input-ui.ql-blank[contenteditable="true"]
+        # <rich-textarea>
+        #   <div class="ql-editor textarea new-input-ui ql-blank" contenteditable="true">
         
         selectors = [
-            # The actual structure from your screenshot
+            # Most specific based on your HTML structure
+            "rich-textarea div.ql-editor[contenteditable='true']",
+            "rich-textarea div.textarea[contenteditable='true']", 
+            "rich-textarea div.new-input-ui[contenteditable='true']",
             "rich-textarea div[contenteditable='true']",
-            "div.ql-editor[contenteditable='true']", 
+            
+            # Alternative patterns for rich-textarea
+            "rich-textarea [contenteditable='true']",
+            
+            # More general contenteditable selectors
+            "div.ql-editor[contenteditable='true']",
             "div.textarea[contenteditable='true']",
             "div.new-input-ui[contenteditable='true']",
             
-            # More specific combinations
-            "rich-textarea div.ql-editor.textarea",
-            "div[data-placeholder='Ask Gemini']",
+            # Placeholder-based selectors
+            "div[data-placeholder*='Enter a prompt']",
+            "div[data-placeholder*='Ask Gemini']",
             "div[aria-label*='Enter a prompt']",
+            "div[aria-label*='Ask Gemini']",
             
-            # Fallback selectors
-            "div[contenteditable='true'][role='textbox']",
+            # Generic fallbacks
+            "[contenteditable='true'][role='textbox']",
             "[contenteditable='true']",
+            
+            # Textarea fallbacks
             "textarea[placeholder*='Ask Gemini']",
+            "textarea[placeholder*='Enter a prompt']",
             "textarea"
         ]
         
         # Wait for page to be ready
         await asyncio.sleep(2)
         
+        BotFormatter.log("Searching for input element...", "DEBUG")
+        
         for i, selector in enumerate(selectors):
             try:
                 BotFormatter.log(f"Trying input selector {i+1}/{len(selectors)}: {selector}", "DEBUG")
                 
-                # Try to find with explicit wait
-                element = WebDriverWait(self.driver, 5).until(
+                # Wait for element to be present and clickable
+                element = WebDriverWait(self.driver, 3).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
                 )
                 
-                # Verify the element is actually the input we want
+                # Additional validation
                 if element.is_displayed() and element.is_enabled():
-                    BotFormatter.log(f"Found input element with selector: {selector}", "SUCCESS")
-                    return element
-                
+                    # Check if it's a reasonable input size (not a huge content area)
+                    size = element.size
+                    location = element.location
+                    
+                    BotFormatter.log(f"Found element - Size: {size}, Location: {location}", "DEBUG")
+                    
+                    # Verify it's likely an input field (reasonable dimensions)
+                    if size['height'] < 300 and size['width'] > 50:  # Not too big, not too small
+                        BotFormatter.log(f"✅ Found valid input element with selector: {selector}", "SUCCESS")
+                        
+                        # Test if we can interact with it
+                        try:
+                            element.click()
+                            await asyncio.sleep(0.1)
+                            BotFormatter.log("✅ Input element is clickable", "SUCCESS")
+                            return element
+                        except Exception as e:
+                            BotFormatter.log(f"Element not clickable: {e}", "DEBUG")
+                            continue
+                    else:
+                        BotFormatter.log(f"Element size not suitable for input: {size}", "DEBUG")
+                        continue
+                else:
+                    BotFormatter.log(f"Element not displayed or enabled", "DEBUG")
+                    continue
+                    
             except TimeoutException:
                 BotFormatter.log(f"Selector timeout: {selector}", "DEBUG")
                 continue
@@ -434,22 +529,75 @@ class AdvancedBrowserGemini:
                 BotFormatter.log(f"Error with selector {selector}: {e}", "DEBUG")
                 continue
         
-        # If all selectors fail, try to find any contenteditable element
+        # If specific selectors fail, try a more thorough search
+        BotFormatter.log("Standard selectors failed, trying comprehensive search", "DEBUG")
+        
         try:
-            BotFormatter.log("Trying fallback: any contenteditable element", "DEBUG")
-            all_elements = self.driver.find_elements(By.CSS_SELECTOR, "[contenteditable='true']")
+            # Find all contenteditable elements
+            all_contenteditable = self.driver.find_elements(By.CSS_SELECTOR, "[contenteditable='true']")
+            BotFormatter.log(f"Found {len(all_contenteditable)} contenteditable elements", "DEBUG")
             
-            for element in all_elements:
-                if element.is_displayed() and element.is_enabled():
-                    # Check if it looks like an input (not too large, not containing lots of text)
-                    if element.size['height'] < 200:  # Reasonable input height
-                        BotFormatter.log(f"Found fallback contenteditable element", "SUCCESS")
-                        return element
+            for element in all_contenteditable:
+                try:
+                    if element.is_displayed() and element.is_enabled():
+                        size = element.size
+                        # Look for input-like characteristics
+                        if (size['height'] > 20 and size['height'] < 200 and 
+                            size['width'] > 100):
+                            
+                            # Check parent elements for rich-textarea
+                            parent_html = self.driver.execute_script(
+                                "return arguments[0].parentElement.outerHTML;", element
+                            )
+                            
+                            if "rich-textarea" in parent_html or "input" in parent_html.lower():
+                                BotFormatter.log("✅ Found input via comprehensive search", "SUCCESS")
+                                element.click()
+                                await asyncio.sleep(0.1)
+                                return element
+                                
+                except Exception as e:
+                    BotFormatter.log(f"Error checking element: {e}", "DEBUG")
+                    continue
                     
         except Exception as e:
-            BotFormatter.log(f"Fallback search failed: {e}", "ERROR")
+            BotFormatter.log(f"Comprehensive search failed: {e}", "DEBUG")
         
-        BotFormatter.log("Could not find any input element", "ERROR")
+        # Final attempt using JavaScript
+        BotFormatter.log("Trying JavaScript-based detection", "DEBUG")
+        try:
+            input_element = self.driver.execute_script("""
+                // Look for rich-textarea specifically
+                var richTextarea = document.querySelector('rich-textarea');
+                if (richTextarea) {
+                    var editableDiv = richTextarea.querySelector('div[contenteditable="true"]');
+                    if (editableDiv) {
+                        return editableDiv;
+                    }
+                }
+                
+                // Fallback: find any contenteditable that looks like input
+                var editables = document.querySelectorAll('div[contenteditable="true"]');
+                for (var i = 0; i < editables.length; i++) {
+                    var rect = editables[i].getBoundingClientRect();
+                    if (rect.height > 20 && rect.height < 200 && rect.width > 100) {
+                        return editables[i];
+                    }
+                }
+                
+                return null;
+            """)
+            
+            if input_element:
+                BotFormatter.log("✅ Found input element via JavaScript", "SUCCESS")
+                input_element.click()
+                await asyncio.sleep(0.1)
+                return input_element
+                
+        except Exception as e:
+            BotFormatter.log(f"JavaScript detection failed: {e}", "DEBUG")
+        
+        BotFormatter.log("❌ Could not find any suitable input element", "ERROR")
         return None
     
     async def _input_message(self, input_element, message):
@@ -586,32 +734,44 @@ class AdvancedBrowserGemini:
             # Just continue, maybe the message was sent anyway
     
     async def _wait_for_response(self):
-        """Wait for and extract response - based on actual HTML structure"""
+        """Wait for and extract response - FIXED version based on actual HTML structure"""
         BotFormatter.log("Waiting for Gemini response...", "DEBUG")
         await asyncio.sleep(4)  # Wait for response to appear
         
-        max_attempts = 6
+        max_attempts = 10
         for attempt in range(max_attempts):
             BotFormatter.log(f"Looking for response - attempt {attempt + 1}/{max_attempts}", "DEBUG")
             
             try:
-                # Based on your HTML structure, try these selectors in order:
+                # Based on your HTML structure, the response is in:
+                # <message-content class="model-response-text ng-star-inserted is-mobile">
+                #   <div class="markdown markdown-main-panel stronger enable-updated-hr-color">
+                #     <p>Response text here</p>
+                #   </div>
+                # </message-content>
+                
+                # Try different selectors based on the actual HTML structure
                 selectors_to_try = [
-                    # The actual structure from your screenshot
-                    "message-content.model-response-text p",
-                    "message-content.model-response-text div.markdown p", 
-                    ".model-response-text p",
-                    ".model-response-text div p",
+                    # Most specific - based on your exact HTML
+                    "message-content.model-response-text .markdown.markdown-main-panel p",
+                    "message-content.model-response-text div.markdown p",
+                    ".model-response-text .markdown p",
                     
                     # Fallback selectors
-                    "div.markdown p:last-child",
-                    "div[class*='markdown'] p:last-child",
+                    "message-content .markdown p",
                     ".markdown-main-panel p",
+                    "div[class*='markdown'] p",
                     
-                    # Even more general fallbacks
+                    # Even more general
+                    ".model-response-text p",
                     "message-content p",
-                    "p:last-of-type"
+                    
+                    # Last resort
+                    "[data-test-id*='model-turn'] p",
+                    "article p"
                 ]
+                
+                found_response = None
                 
                 for i, selector in enumerate(selectors_to_try):
                     try:
@@ -619,34 +779,156 @@ class AdvancedBrowserGemini:
                         BotFormatter.log(f"Selector '{selector}' found {len(elements)} elements", "DEBUG")
                         
                         if elements:
-                            # Check the last few elements
-                            for element in reversed(elements[-3:]):
-                                text = element.text.strip()
-                                
-                                # Check if this looks like a valid response
-                                if (text and 
-                                    len(text) > 5 and
-                                    not text.lower().startswith("important system") and
-                                    not text.lower().startswith("you must respond") and
-                                    not "Ask Gemini" in text and
-                                    not "gemini can make mistakes" in text.lower() and
-                                    not text.lower().startswith("the user data directory") and  # Filter out Chrome messages
-                                    element.is_displayed()):
+                            # Get the last few response elements (most recent)
+                            recent_elements = elements[-3:] if len(elements) > 3 else elements
+                            
+                            for element in reversed(recent_elements):
+                                try:
+                                    text = element.text.strip()
                                     
-                                    BotFormatter.log(f"Found response with selector '{selector}': {text[:100]}...", "SUCCESS")
-                                    return text
+                                    # Filter out invalid responses
+                                    if self._is_valid_response(text):
+                                        BotFormatter.log(f"Found valid response with selector '{selector}': {text[:100]}...", "SUCCESS")
+                                        found_response = text
+                                        break
+                                        
+                                except Exception as e:
+                                    BotFormatter.log(f"Error extracting text from element: {e}", "DEBUG")
+                                    continue
+                            
+                            if found_response:
+                                break
+                                
                     except Exception as e:
                         BotFormatter.log(f"Selector '{selector}' failed: {e}", "DEBUG")
                         continue
-                        
+                
+                if found_response:
+                    return found_response
+                    
             except Exception as e:
                 BotFormatter.log(f"Error in attempt {attempt + 1}: {e}", "DEBUG")
             
-            # Wait before next attempt
-            await asyncio.sleep(2)
+            # Wait before next attempt, with increasing delay
+            await asyncio.sleep(2 + (attempt * 0.5))
         
-        BotFormatter.log("Could not extract response text", "ERROR")
-        return None
+        # If no response found, try alternative extraction methods
+        BotFormatter.log("Standard selectors failed, trying alternative methods", "DEBUG")
+        return await self._extract_response_alternative()
+    
+    def _is_valid_response(self, text):
+        """Check if extracted text is a valid response"""
+        if not text or len(text) < 3:
+            return False
+        
+        # Filter out common invalid responses
+        invalid_patterns = [
+            "important system",
+            "you must respond",
+            "ask gemini",
+            "gemini can make mistakes",
+            "the user data directory",
+            "chrome://",
+            "send a message",
+            "enter a prompt",
+            "choose a",
+            "based on",
+            "copy code",
+            "show more",
+            "continue",
+            "thinking",
+            "loading",
+            "please wait"
+        ]
+        
+        text_lower = text.lower()
+        for pattern in invalid_patterns:
+            if pattern in text_lower:
+                return False
+        
+        # Must contain actual content (not just punctuation/numbers)
+        letter_count = len(re.findall(r'[a-zA-Z\u0600-\u06FF\u0750-\u077F]', text))
+        if letter_count < 3:
+            return False
+        
+        return True
+    
+    async def _extract_response_alternative(self):
+        """Alternative method to extract response when standard selectors fail"""
+        try:
+            BotFormatter.log("Trying alternative extraction methods", "DEBUG")
+            
+            # Method 1: Get all paragraphs and find the most recent non-empty one
+            all_paragraphs = self.driver.find_elements(By.TAG_NAME, "p")
+            BotFormatter.log(f"Found {len(all_paragraphs)} total paragraphs", "DEBUG")
+            
+            valid_responses = []
+            for p in reversed(all_paragraphs[-10:]):  # Check last 10 paragraphs
+                try:
+                    text = p.text.strip()
+                    if self._is_valid_response(text):
+                        valid_responses.append(text)
+                except:
+                    continue
+            
+            if valid_responses:
+                response = valid_responses[0]  # Most recent valid response
+                BotFormatter.log(f"Found response via alternative method: {response[:100]}...", "SUCCESS")
+                return response
+            
+            # Method 2: Try to get page source and parse manually
+            BotFormatter.log("Trying page source parsing", "DEBUG")
+            page_source = self.driver.page_source
+            
+            # Look for response patterns in page source
+            
+            # Pattern for markdown content
+            markdown_pattern = r'<div[^>]*class="[^"]*markdown[^"]*"[^>]*>(.*?)</div>'
+            markdown_matches = re.findall(markdown_pattern, page_source, re.DOTALL | re.IGNORECASE)
+            
+            for match in reversed(markdown_matches[-3:]):  # Check last 3 matches
+                # Extract text from HTML
+                
+                # Remove HTML tags
+                clean_text = re.sub(r'<[^>]+>', '', match)
+                clean_text = unescape(clean_text).strip()
+                
+                if self._is_valid_response(clean_text):
+                    BotFormatter.log(f"Found response via page source: {clean_text[:100]}...", "SUCCESS")
+                    return clean_text
+            
+            # Method 3: JavaScript execution to get content
+            BotFormatter.log("Trying JavaScript extraction", "DEBUG")
+            try:
+                # Execute JavaScript to find response content
+                response_text = self.driver.execute_script("""
+                    // Find all elements that might contain the response
+                    var responseElements = document.querySelectorAll('message-content.model-response-text, .model-response-text, .markdown p, [data-test-id*="model"] p');
+                    
+                    var validTexts = [];
+                    for (var i = 0; i < responseElements.length; i++) {
+                        var text = responseElements[i].textContent.trim();
+                        if (text.length > 10 && !text.toLowerCase().includes('system') && !text.toLowerCase().includes('gemini can make')) {
+                            validTexts.push(text);
+                        }
+                    }
+                    
+                    return validTexts.length > 0 ? validTexts[validTexts.length - 1] : null;
+                """)
+                
+                if response_text and self._is_valid_response(response_text):
+                    BotFormatter.log(f"Found response via JavaScript: {response_text[:100]}...", "SUCCESS")
+                    return response_text
+                    
+            except Exception as e:
+                BotFormatter.log(f"JavaScript extraction failed: {e}", "DEBUG")
+            
+            BotFormatter.log("All extraction methods failed", "ERROR")
+            return None
+            
+        except Exception as e:
+            BotFormatter.log(f"Alternative extraction failed: {e}", "ERROR")
+            return None
     
     def list_personalities(self):
         """List all available AI personalities"""
@@ -692,6 +974,8 @@ class AdvancedBrowserGemini:
                 
         except Exception as e:
             return f"❌ Browser test failed: {str(e)[:50]}..."
+    
+    def close(self):
         """Close the browser"""
         if self.driver:
             try:
